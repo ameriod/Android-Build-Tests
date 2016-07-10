@@ -9,7 +9,7 @@ android {
         minSdkVersion 15
         targetSdkVersion 23
         versionCode(1 + (System.env.BUILD_NUMBER ? $System.env.BUILD_NUMBER : 0))
-        versionName "1.0.0" + (System.env.BUILD_NUMBER ? "$System.env.BUILD_NUMBER" : "")
+        versionName "1.0.0" + (System.env.BUILD_NUMBER ? ".$System.env.BUILD_NUMBER" : "")
     }
 
     def flavorDevSigningConfig
@@ -17,6 +17,7 @@ android {
     def urlProd
     def urlStaging
     def props = getProperties("flavor")
+    def gitSha = getCurrentGitSha()
 
     productFlavors {
 
@@ -47,6 +48,7 @@ android {
             // Sets up the common fields for each build type
             type.buildConfigField 'String', 'URL_PRODUCTION', urlProd
             type.buildConfigField 'String', 'URL_STAGING', urlStaging
+            type.buildConfigField 'String', 'GIT_SHA', "\"" + gitSha + "\""
         }
 
         release {
@@ -71,7 +73,7 @@ android {
             signingConfig flavorDevSigningConfig
 
             applicationIdSuffix ".beta"
-            versionNameSuffix "_beta"
+            versionNameSuffix "_beta_" + gitSha
 
             buildConfigField "boolean", "IS_DEBUG", "true"
             buildConfigField "boolean", "REPORT_CRASHES", "true"
@@ -89,7 +91,7 @@ android {
             signingConfig flavorDevSigningConfig
 
             applicationIdSuffix ".betaInternal"
-            versionNameSuffix "_betaInternal"
+            versionNameSuffix "_betaInternal_" + gitSha
 
             buildConfigField "boolean", "IS_DEBUG", "true"
             buildConfigField "boolean", "REPORT_CRASHES", "true"
@@ -107,7 +109,7 @@ android {
             signingConfig flavorDevSigningConfig
 
             applicationIdSuffix ".debug"
-            versionNameSuffix "_debug"
+            versionNameSuffix "_debug_" + gitSha
 
             buildConfigField "boolean", "IS_DEBUG", "true"
             buildConfigField "boolean", "REPORT_CRASHES", "false"
@@ -221,4 +223,13 @@ def createSigningConfigDev(props, name) {
         }
     }
     return android.signingConfigs.config
+}
+
+def getCurrentGitSha() {
+    def stdout = new ByteArrayOutputStream()
+    exec {
+        commandLine 'git', 'log', '--pretty=format:%h', '-n 1'
+        standardOutput = stdout
+    }
+    return stdout.toString().trim()
 }

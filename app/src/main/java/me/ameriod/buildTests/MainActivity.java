@@ -11,6 +11,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         TextView tv = (TextView) findViewById(R.id.textview);
-        tv.setText("" + BuildConfig.APPLICATION_ID + "\n" + BuildConfig.URL);
+        tv.setText("" + BuildConfig.APPLICATION_ID + "\n" + BuildConfig.URL + "\n" + BuildConfig.GIT_SHA);
     }
 }
