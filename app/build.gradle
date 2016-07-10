@@ -57,6 +57,8 @@ android {
 
             signingConfig flavorReleaseSigningConfig
 
+            versionNameSuffix "-" + gitSha
+
             buildConfigField "boolean", "IS_DEBUG", "false"
             buildConfigField "boolean", "REPORT_CRASHES", "true"
             buildConfigField "boolean", "SEND_ANALYTICS", "true"
