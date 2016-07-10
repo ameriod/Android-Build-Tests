@@ -1,0 +1,224 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 23
+    buildToolsVersion "23.0.3"
+
+    defaultConfig {
+        applicationId "me.ameriod.plugin"
+        minSdkVersion 15
+        targetSdkVersion 23
+        versionCode(1 + (System.env.BUILD_NUMBER ? $System.env.BUILD_NUMBER : 0))
+        versionName "1.0.0" + (System.env.BUILD_NUMBER ? "$System.env.BUILD_NUMBER" : "")
+    }
+
+    def flavorDevSigningConfig
+    def flavorReleaseSigningConfig
+    def urlProd
+    def urlStaging
+    def props = getProperties("flavor")
+
+    productFlavors {
+
+        final APPLICATION_ID = "ApplicationId"
+        final URL = "Url"
+        final URL_STAGING = "UrlStaging"
+
+        flavor1 {
+            applicationId props[name + APPLICATION_ID]
+            flavorDevSigningConfig = createSigningConfigRelease(props, name)
+            flavorReleaseSigningConfig = createSigningConfigDev(props, name)
+            urlProd = props[it.name + URL];
+            urlStaging = props[it.name + URL_STAGING];
+        }
+
+        flavor2 {
+            applicationId props[name + APPLICATION_ID]
+            flavorDevSigningConfig = createSigningConfigRelease(props, name)
+            flavorReleaseSigningConfig = createSigningConfigDev(props, name)
+            urlProd = props[it.name + URL];
+            urlStaging = props[it.name + URL_STAGING];
+        }
+    }
+
+    buildTypes {
+
+        buildTypes.each { type ->
+            // Sets up the common fields for each build type
+            type.buildConfigField 'String', 'URL_PRODUCTION', urlProd
+            type.buildConfigField 'String', 'URL_STAGING', urlStaging
+        }
+
+        release {
+            debuggable false
+            minifyEnabled false
+
+            signingConfig flavorReleaseSigningConfig
+
+            buildConfigField "boolean", "IS_DEBUG", "false"
+            buildConfigField "boolean", "REPORT_CRASHES", "true"
+            buildConfigField "boolean", "SEND_ANALYTICS", "true"
+            buildConfigField "boolean", "SEND_DEBUG_ANAYLTICS", "false"
+            buildConfigField "boolean", "DEBUG_FIELDS", "false"
+
+            buildConfigField 'String', 'URL', urlProd
+        }
+
+        betaRelease {
+            debuggable true
+            minifyEnabled false
+
+            signingConfig flavorDevSigningConfig
+
+            applicationIdSuffix ".beta"
+            versionNameSuffix "_beta"
+
+            buildConfigField "boolean", "IS_DEBUG", "true"
+            buildConfigField "boolean", "REPORT_CRASHES", "true"
+            buildConfigField "boolean", "SEND_ANALYTICS", "false"
+            buildConfigField "boolean", "SEND_DEBUG_ANAYLTICS", "false"
+            buildConfigField "boolean", "DEBUG_FIELDS", "false"
+
+            buildConfigField 'String', 'URL', urlProd
+        }
+
+        betaInternal {
+            debuggable true
+            minifyEnabled false
+
+            signingConfig flavorDevSigningConfig
+
+            applicationIdSuffix ".betaInternal"
+            versionNameSuffix "_betaInternal"
+
+            buildConfigField "boolean", "IS_DEBUG", "true"
+            buildConfigField "boolean", "REPORT_CRASHES", "true"
+            buildConfigField "boolean", "SEND_ANALYTICS", "false"
+            buildConfigField "boolean", "SEND_DEBUG_ANAYLTICS", "true"
+            buildConfigField "boolean", "DEBUG_FIELDS", "false"
+
+            buildConfigField 'String', 'URL', urlStaging
+        }
+
+        debug {
+            debuggable true
+            minifyEnabled false
+
+            signingConfig flavorDevSigningConfig
+
+            applicationIdSuffix ".debug"
+            versionNameSuffix "_debug"
+
+            buildConfigField "boolean", "IS_DEBUG", "true"
+            buildConfigField "boolean", "REPORT_CRASHES", "false"
+            buildConfigField "boolean", "SEND_ANALYTICS", "false"
+            buildConfigField "boolean", "SEND_DEBUG_ANAYLTICS", "false"
+            buildConfigField "boolean", "DEBUG_FIELDS", "true"
+
+            buildConfigField 'String', 'URL', urlStaging
+        }
+    }
+
+    applicationVariants.all { variant ->
+        def name = getFlavorFromVariant(variant.name);
+        // Get the resource directory
+        String mainResDir = new File("").getAbsolutePath() + "/app/src/main/res/"
+        def defaultColorPrimary = props['defaultColorPrimary']
+        def defaultColorAccent = props['defaultColorAccent']
+        def defaultColorPrimaryDark = props['defaultColorPrimaryDark']
+        def newColorPrimary = props[name + 'ColorPrimary']
+        def newColorAccent = props[name + 'ColorAccent']
+        def newColorPrimaryDark = props[name + 'ColorPrimaryDark']
+
+        // merge resources is done in order of each build, this lets us change all of the colors, then change them
+        // right back to the defaults.
+        variant.mergeResources.doFirst {
+            // Change the colors to the flavor's colors
+            iterateFilesInDir(mainResDir, newColorPrimary, newColorAccent, newColorPrimaryDark, defaultColorPrimary,
+                    defaultColorAccent, defaultColorPrimaryDark)
+        }
+        variant.mergeResources.doLast {
+            // Change the colors back to the flavor's colors
+            iterateFilesInDir(mainResDir, defaultColorPrimary, defaultColorAccent, defaultColorPrimaryDark, newColorPrimary,
+                    newColorAccent, newColorPrimaryDark)
+        }
+
+        // Rename the outputs
+        variant.outputs.each { output ->
+            def file = output.outputFile
+            // Do not rename debug, AndroidStudio is not smart and will still install the old dev after the day has past
+            if (!file.name.contains("debug")) {
+                def newName = name + "_v" + versionName + "_" + new Date().format('MM-dd-yyyy') + ".apk"
+                output.outputFile = new File(file.parent, newName)
+            }
+        }
+    }
+}
+
+dependencies {
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+    testCompile 'junit:junit:4.12'
+    compile 'com.android.support:appcompat-v7:23.4.0'
+}
+
+configurations.all {
+    // check for updates every build only for changing = true; dependencies, This should only be used for -SNAPSHOT's
+    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+}
+
+def getFlavorFromVariant(name) {
+    // All of the buildTypes need to be replaced.
+    return name.replace("Debug", "").replace("BetaInternal", "").replace("BetaRelease", "").replace("Release", "")
+}
+
+def getProperties(prefix) {
+    def Properties props = new Properties()
+    props.load(new FileInputStream(project.getRootProject().file("app/" + prefix + ".properties")))
+    return props;
+}
+
+def copyAndReplaceText(source, dest, Closure replaceText) {
+    dest.write(replaceText(source.text))
+}
+
+def iterateFilesInDir(dir, newPrimary, newAccent, newDark, oldPrimary, oldAccent, oldDark) {
+    FileCollection proGuardFileCollection = files { file(dir).listFiles() }
+    proGuardFileCollection.each {
+        if (it.isDirectory()) {
+            iterateFilesInDir(it.getAbsolutePath(), newPrimary, newAccent, newDark, oldPrimary, oldAccent, oldDark)
+        } else if (it.name.contains(".xml")) {
+            // only go though the .xml files (res and drawables)
+            copyAndReplaceText(it, it) {
+                it.replaceAll(oldPrimary, newPrimary).replaceAll(oldAccent, newAccent).replaceAll(oldDark, newDark)
+            }
+        }
+    }
+}
+
+def createSigningConfigRelease(props, name) {
+    android {
+        signingConfigs {
+            config {
+                storeFile file(props[name + 'KeystoreReleaseFile'])
+                storePassword props[name + 'KeystoreReleaseStorePass']
+                keyAlias props[name + 'KeystoreReleaseKeyAlias']
+                keyPassword props[name + 'KeystoreReleaseKeyPassword']
+            }
+        }
+    }
+    return android.signingConfigs.config
+}
+
+def createSigningConfigDev(props, name) {
+    android {
+        signingConfigs {
+            config {
+                storeFile file(props[name + 'KeystoreDevFile'])
+                storePassword props[name + 'KeystoreDevStorePass']
+                keyAlias props[name + 'KeystoreDevKeyAlias']
+                keyPassword props[name + 'KeystoreDevKeyPassword']
+            }
+        }
+    }
+    return android.signingConfigs.config
+}
